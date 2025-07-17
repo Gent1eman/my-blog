@@ -1,0 +1,26 @@
+.VPHome {
+    // 定义遮罩样式
+    background: radial-gradient(
+        ellipse,
+        rgba(var(--bg-gradient-home), 1) 0%,
+        rgba(var(--bg-gradient-home), 0) 150%
+    );
+
+    // 自定义首页背景图
+    &::before {
+        // 图片来源：https://zhuanlan.zhihu.com/p/54060187
+        // background-image: url(./assets/bg.webp);
+        background-image: url(./assets/watercolor-5062356_1920.jpg);
+        background-size: cover;
+    }
+}
+
+/* 强制导航栏始终使用 home 样式 */
+// .VPNavBar {
+//     background-color: var(--vp-nav-bg-color) !important;
+//     backdrop-filter: none !important;
+// }
+/* 移除滚动时的样式切换逻辑 */
+// .VPNavBar.top {
+//     background-color: var(--vp-nav-bg-color);
+// }
