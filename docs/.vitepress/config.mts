@@ -82,6 +82,7 @@ export default defineConfig({
                     { text: "React源码学习", link: "/note/react" },
                     { text: "vue3源码学习", link: "/note/vue3" },
                     { text: "导出PDF", link: "/note/pdf" },
+                    { text: "Jenkins自动化部署", link: "/note/jenkins" },
                 ],
             },
             { text: "笔试", link: "/write" },
