@@ -852,3 +852,498 @@ eventHub.publish("error", "资源加载错误");
 
 unsubscribe();
 ```
+
+## 15 实现简单的柯理化函数
+
+```javascript
+function curry(fn, args) {
+    let length = fn.length;
+
+    args = args || [];
+
+    return function () {
+        let subArgs = args.slice(0);
+
+        // 拼接得到现在的所有参数
+        for (let i = 0; i < arguments.length; i++) {
+            subArgs.push(arguments[i]);
+        }
+
+        // 判断参数的长度是否已经满足函数所需参数的长度
+        if (subArgs.length >= length) {
+            // 执行函数
+            return fn.apply(this, subArgs);
+        } else {
+            return curry.call(this, fn, subArgs);
+        }
+    };
+}
+
+function multiply(a, b, c, d) {
+    return a * b * c * d;
+}
+
+const curriedMultiply = curry(multiply);
+
+console.log(curriedMultiply(2)(3)(4)(5)); // 120
+console.log(curriedMultiply(2, 3)(4, 5)); // 120
+console.log(curriedMultiply(2)(3, 4, 5)); // 120
+```
+
+## 16 手写简版 Promise 与 then
+
+```javascript
+const PENDING = "pending";
+const FULFILLED = "fulfilled";
+const REJECTED = "rejected";
+
+class MyPromise {
+    constructor(executor) {
+        this.state = PENDING;
+        this.value = undefined;
+        this.reason = undefined;
+        this.onFulfilled = [];
+        this.onRejected = [];
+
+        const resolve = (value) => {
+            if (this.state !== PENDING) return;
+            this.state = FULFILLED;
+            this.value = value;
+            this.onFulfilled.forEach((fn) => fn());
+        };
+
+        const reject = (reason) => {
+            if (this.state !== PENDING) return;
+            this.state = REJECTED;
+            this.value = reason;
+            this.onRejected.forEach((fn) => fn());
+        };
+
+        try {
+            executor(resolve, reject);
+        } catch (error) {
+            reject(error);
+        }
+    }
+
+    then(onFulfilled, onRejected) {
+        // 值穿透处理
+        onFulfilled =
+            typeof onFulfilled === "function" ? onFulfilled : (v) => v;
+        onRejected = typeof onRejected === "function" ? onRejected : (r) => r;
+
+        return new MyPromise((resolve, reject) => {
+            const handler = () => {
+                try {
+                    const result =
+                        this.state === FULFILLED
+                            ? onFulfilled(this.value)
+                            : onRejected(this.reason);
+
+                    // 简化处理：不考虑 thenable 对象，仅处理同类 Promise
+                    if (result instanceof MyPromise) {
+                        result.then(resolve, reject);
+                    } else {
+                        resolve(result);
+                    }
+                } catch (e) {
+                    reject(e);
+                }
+            };
+
+            if (this.state === FULFILLED || this.state === REJECTED) {
+                handler();
+            } else {
+                this.onFulfilled.push(handler);
+                this.onRejected.push(handler);
+            }
+        });
+    }
+}
+
+const p = new MyPromise((resolve, reject) => {
+    setTimeout(() => {
+        resolve("hello");
+    }, 1000);
+});
+
+p.then((res) => {
+    console.log("res1:", res);
+    return res + " world";
+}).then((res) => {
+    console.log("res2:", res);
+});
+```
+
+## 17 实现非负大整数相乘
+
+```javascript
+function multiplyBigIntegers(num1, num2) {
+    // 处理特殊情况
+    if (num1 === "0" || num2 === "0") return "0";
+
+    const len1 = num1.length;
+    const len2 = num2.length;
+    const result = new Array(len1 + len2).fill(0);
+
+    // 从右往左逐位相乘
+    for (let i = len1 - 1; i >= 0; i--) {
+        for (let j = len2 - 1; j >= 0; j--) {
+            const product = (num1[i] - "0") * (num2[j] - "0");
+            const sum = result[i + j + 1] + product;
+
+            result[i + j + 1] = sum % 10;
+            result[i + j] += Math.floor(sum / 10);
+        }
+    }
+
+    // 去除前导零
+    let start = 0;
+    while (start < result.length && result[start] === 0) {
+        start++;
+    }
+
+    // 将数组转换为字符串
+    return start === result.length ? "0" : result.slice(start).join("");
+}
+```
+
+## 18 实现简单的 ajax 请求
+
+```javascript
+const SERVER_URL = "/server";
+
+let xhr = new XMLHttpRequest();
+
+// 创建http请求
+xhr.open("GET", SERVER_URL);
+// 设置监听函数
+xhr.onreadystatechange = function () {
+    // 请求状态码，4表示请求完成
+    if (this.readyState !== 4) return;
+    // 当请求成功时
+    if (this.status === 200) {
+        console.log("请求成功，数据：", this.response);
+    } else {
+        console.error(this.statusText);
+    }
+};
+
+// 设置请求失败的监听函数
+xhr.onerror = function () {
+    console.error(this.statusText);
+};
+
+xhr.responseType = "json";
+// 设置请求头
+xhr.setRequestHeader("Accept", "application/json");
+
+// 发送请求
+xhr.send(null);
+```
+
+## 19 实现简单的虚拟列表与图片懒加载
+
+```html
+<body>
+    <div id="container">
+        <div id="phantom"></div>
+        <div id="content"></div>
+    </div>
+
+    <script>
+        <!-- 常量定义：虚拟列表与懒加载的核心配置参数 -->
+        // 单个列表项高度（像素）
+        const ITEM_HEIGHT = 300;
+        // 总列表项数量
+        const TOTAL_COUNT = 50;
+        // 可视区域外的缓冲项数量（上下各BUFFER项，避免滚动时白屏）
+        const BUFFER = 0;
+        // 容器可视区域高度（像素）
+        const VIEW_HEIGHT = 600;
+
+        //  获取DOM元素
+        const container = document.getElementById("container"); // 滚动容器
+        const phantom = document.getElementById("phantom"); // 占位元素（用于撑开滚动高度）
+        const content = document.getElementById("content"); // 实际渲染内容的容器
+
+        // 设置占位元素高度，使滚动条能正确反映总内容高度
+        phantom.style.height = TOTAL_COUNT * ITEM_HEIGHT + "px";
+
+        // 计算需要渲染的项数：可视区域能容纳的项数 + 上下缓冲项
+        const visibleCount = Math.ceil(VIEW_HEIGHT / ITEM_HEIGHT) + BUFFER * 2;
+
+        // 创建图片懒加载观察器
+        // 当图片进入视口时，将data-src赋值给src实现懒加载，并停止观察该图片
+        let observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                    console.log(2);
+
+                    const img = entry.target;
+                    img.src = img.dataset.src; // 加载图片
+                    observer.unobserve(img); // 停止观察已加载的图片
+                }
+            });
+        });
+
+        // 核心渲染函数：根据滚动位置计算并渲染可视区域内（含缓冲）的列表项
+        function render() {
+            console.log(1);
+
+            const scrollTop = container.scrollTop; // 获取容器滚动距离
+            // 计算起始索引：当前滚动位置对应的项索引 - 缓冲项（确保顶部有缓冲）
+            const start = Math.max(
+                0,
+                Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER
+            );
+            // 计算结束索引：起始索引 + 需渲染的项数（确保不超过总数量）
+            const end = Math.min(TOTAL_COUNT, start + visibleCount);
+
+            content.innerHTML = ""; // 清空现有内容
+
+            // 循环渲染start到end之间的列表项
+            for (let i = start; i < end; i++) {
+                const div = document.createElement("div");
+                div.className = "item"; // 设置列表项样式类
+                div.style.top = i * ITEM_HEIGHT + "px"; // 设置列表项绝对定位的top值（虚拟列表核心：通过定位模拟列表位置）
+
+                const img = document.createElement("img");
+                img.dataset.src = `https://picsum.photos/id/${i}/300/150`; // 图片真实地址（暂存于data-src）
+                img.alt = `Image ${i}`;
+                observer.observe(img); // 监听图片是否进入视口（用于懒加载）
+
+                div.appendChild(img);
+                content.appendChild(div);
+            }
+        }
+
+        // 监听滚动事件：滚动时触发重新渲染
+        container.addEventListener("scroll", () => {
+            render();
+        });
+
+        render(); // 初始化首屏渲染
+    </script>
+</body>
+```
+
+## 20 手写简版 useMemo
+
+```javascript
+let memoCache = {
+    deps: undefined,
+    value: undefined,
+};
+
+function myUseMemo(fn, deps) {
+    if (!memoCache.deps) {
+        memoCache.deps = deps;
+        memoCache.value = fn();
+    } else {
+        const isChange = !deps.every((dep, i) =>
+            Object.is(dep, memoCache.deps[i])
+        );
+        if (isChange) {
+            memoCache.deps = deps;
+            memoCache.value = fn();
+        }
+    }
+    return memoCache.value;
+}
+
+// 测试用例
+let computeCount = 0;
+
+function computeHeavyValue(a, b) {
+    computeCount++;
+    return a + b;
+}
+
+// 模拟组件第一次渲染
+function render(a, b) {
+    const result = myUseMemo(() => computeHeavyValue(a, b), [a, b]);
+    console.log(`Result: ${result}, computeCount: ${computeCount}`);
+}
+
+// 1. 初始渲染（a=1, b=2）
+render(1, 2); // ➜ Result: 3, computeCount: 1
+
+// 2. 重复依赖（a=1, b=2），不应重新计算
+render(1, 2); // ➜ Result: 3, computeCount: 1 ✅ 缓存生效
+
+// 3. 依赖变化（a=2, b=3），应重新计算
+render(2, 3); // ➜ Result: 5, computeCount: 2 ✅ 重新计算
+
+// 4. 再次相同（a=2, b=3），仍应复用缓存
+render(2, 3); // ➜ Result: 5, computeCount: 2 ✅ 缓存生效
+```
+
+## 21 手写简版 useCallback
+
+```javascript
+let callbackCache = {
+    deps: undefined
+    fn:undefined
+}
+
+function muUseCallback(fn,deps) {
+    if (!callbackCache.deps) {
+        callbackCache.deps = deps
+        callbackCache.fn = fn
+    } else {
+        const isChange = !deps.every((item, index) => Object.is(item, callbackCache.deps[index]))
+        if (isChange) {
+            callbackCache.deps = deps
+            callbackCache.fn = fn
+        }
+    }
+    return callbackCache.fn
+}
+```
+
+## 22 快速排序
+
+```javascript
+let sortArray = function (nums) {
+    quickSort(nums, 0, nums.length - 1);
+    return nums;
+};
+
+function quickSort(nums, left, right) {
+    if (left >= right) return;
+    const [lt, gt] = partition(nums, left, right);
+    quickSort(nums, left, lt - 1); // 递归处理 < pivot 的部分
+    quickSort(nums, gt + 1, right); // 递归处理 > pivot 的部分
+}
+
+function partition(nums, left, right) {
+    // 随机选择基准，避免最坏情况
+    const randomIndex = left + Math.floor(Math.random() * (right - left + 1));
+    console.log("哨兵：", nums[randomIndex]);
+    console.log("刚开始：", nums);
+    swap(nums, left, randomIndex);
+    console.log("交换后：", nums);
+    const pivot = nums[left];
+
+    let lt = left; // 最终 `< pivot` 的右边界
+    let gt = right; // 最终 `> pivot` 的左边界
+    let i = left + 1; // 当前指针
+
+    while (i <= gt) {
+        if (nums[i] < pivot) {
+            swap(nums, i, lt);
+            lt++;
+            i++;
+        } else if (nums[i] > pivot) {
+            swap(nums, i, gt);
+            gt--;
+        } else {
+            i++; // 等于 pivot，跳过
+        }
+    }
+    console.log("循环后：", nums);
+
+    return [lt, gt]; // 返回等于 pivot 的左右边界
+}
+
+function swap(nums, i, j) {
+    [nums[i], nums[j]] = [nums[j], nums[i]];
+}
+```
+
+## 23 堆排序
+
+```javascript
+function heapSort(nums) {
+    // 建堆操作：堆化除叶节点以外的其他所有节点
+    for (let i = Math.floor(nums.length / 2) - 1; i >= 0; i--) {
+        siftDown(nums, nums.length, i);
+    }
+
+    // 从堆中提取最大元素，循环n-1轮
+    for (let i = nums.length - 1; i >= 0; i--) {
+        // 交换根节点与 最右叶节点（交换首尾元素）
+        [nums[0], nums[i]] = [nums[i], nums[0]];
+        // 以根节点为起点，从顶至底进行堆化
+        siftDown(nums, i, 0);
+    }
+    console.log(nums);
+}
+
+function siftDown(nums, n, i) {
+    while (true) {
+        // 判断节点i,l,r中值最大的节点，记为ma
+        let l = 2 * i + 1;
+        let r = 2 * i + 2;
+
+        let ma = i;
+        if (l < n && nums[l] > nums[ma]) {
+            ma = l;
+        }
+        if (r < n && nums[r] > nums[ma]) {
+            ma = r;
+        }
+
+        // 若节点i最大或 索引l、r越界，无须继续堆化，跳出循环
+        if (ma === i) {
+            break;
+        }
+
+        // 交换两节点
+        [nums[i], nums[ma]] = [nums[ma], nums[i]];
+        // 循环向下堆化
+        i = ma;
+    }
+}
+let nums = [3, 4, 1, 5, 9, 2, 1, 6];
+heapSort(nums);
+```
+
+## 24 冒泡排序
+
+```javascript
+function sort(nums) {
+    for (let i = nums.length - 1; i > 0; i--) {
+        let flag = false;
+        for (let j = 0; j < i; j++) {
+            if (nums[j] > nums[j + 1]) {
+                let temp = nums[j];
+                nums[j] = nums[j + 1];
+                nums[j + 1] = temp;
+                flag = true;
+            }
+        }
+        // 没有交换说明已经有序，则跳出循环
+        if (!flag) break;
+    }
+    console.log(nums);
+}
+
+let nums = [3, 4, 1, 5, 9, 2, 1, 6];
+sort(nums);
+```
+
+## 25 选择排序
+
+```javascript
+function sort(nums) {
+    // 外循环：未排序区间 [sortIndex,nums.length-1]
+    for (let j = 0; j < nums.length - 1; j++) {
+        // 找到未排序的部分  [j,nums.length-1]
+        let minIndex = j;
+        // 内循环：找到未排序区间内的最小元素
+        for (let i = minIndex + 1; i < nums.length - 1; i++) {
+            if (nums[i] < nums[minIndex]) {
+                minIndex = i; // 找到最小元素的索引
+            }
+        }
+        // 将该最小元素与未排序区间的首个元素交换
+        [nums[j], nums[minIndex]] = [nums[minIndex], nums[j]];
+    }
+    console.log(nums);
+}
+
+let nums = [3, 4, 1, 5, 9, 2, 1, 6];
+sort(nums);
+```
